@@ -1,9 +1,7 @@
-- First-prize Academic Scholarship, 2023.
+- Mathematical Contest in Modeling Honorable Mention, MCM, 2023.
 
-- Freshman Academic Scholarship, 2022.
+- Freshman Academic Scholarship, 2020.
 
-- Excellent Graduation Project of Jiangsu Province, 2022.
+- Excellent Graduation Project of Guangdong Province, 2024.
 
-- First-prize Enterprise Scholarship, 2021.
-
-- First-prize Academic Scholarship, 2019.
+- Excellent Graduation Project of Southern University of Science and Technology, 2024.

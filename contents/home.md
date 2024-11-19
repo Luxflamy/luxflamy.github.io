@@ -1,16 +1,16 @@
 
 
-[![senli1073](https://img.shields.io/badge/senli1073-github-blue?logo=github)](https://github.com/senli1073)
+[![senli1073](https://img.shields.io/badge/senli1073-github-blue?logo=github)](https://github.com/Luxflamy)
 
-He is currently pursuing a Master's Degree in Computer Science, at School of Computer Science and Technology, China University of Mining and Technology, China.
+He is currently pursuing a Master's Degree in Statistics and Data Science, at University of Wisconsin Madison, USA.
 
 #### Email
-sli[at]cumt.edu.cn
+xli2579[at]wisc.edu
 
 #### Education
-M.E., Computer Science and Technology, China University of Mining and Technology, 2022—2025 (expected).\
-B.E., Data Science and Big Data Technology, China University of Mining and Technology, 2018—2022.
+M.E., Statistics and Data Science, University of Wisconsin Madison, 2023—2025 (expected).\
+B.E., Statistics, Southern University of Science and Technology, Shen Zhen, Guangdong, China, 2020—2023.
 
 #### Research Interests
-Deep Learning, Artificial Intelligence Seismology, Mine Microseismic.
+Deep Learning, Supervised and unsupervised Learning, Time Series Prediction, Hybrid Modeling Approaches, High-Dimensional Data Processing.
 
