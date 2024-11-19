@@ -1,6 +1,6 @@
 
 
-[![senli1073](https://img.shields.io/badge/senli1073-github-blue?logo=github)](https://github.com/Luxflamy)
+[![Xiangyi Li](https://img.shields.io/badge/senli1073-github-blue?logo=github)](https://github.com/Luxflamy)
 
 He is currently pursuing a Master's Degree in Statistics and Data Science, at University of Wisconsin Madison, USA.
 
