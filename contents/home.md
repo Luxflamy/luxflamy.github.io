@@ -2,7 +2,7 @@
 
 [![Xiangyi Li](https://img.shields.io/badge/xiangyili-github-blue?logo=github)](https://github.com/Luxflamy)
 
-I an currently pursuing a Master's Degree in Statistics and Data Science, at University of Wisconsin Madison, USA.
+I am currently pursuing a Master's Degree in Statistics and Data Science, at University of Wisconsin Madison, USA.
 
 #### Email
 xli2579[at]wisc.edu
