@@ -22,6 +22,7 @@ export interface GlitchRandomizerRanges {
     'waves.amplitude'?: RandomRange;
     'waves.frequency'?: RandomRange;
     'waves.speed'?: RandomRange;
+    'crt.glowIntensity'?: RandomRange;
 }
 
 export interface GlitchRandomizerProps {
@@ -35,5 +36,9 @@ export interface GlitchRandomizerProps {
     children: React.ReactElement;
     /** Transition smoothing factor (0.0 to 1.0) */
     smoothing?: number;
+    /** Master multiplier for all randomized effects. 1.0 = normal, 0.0 = static/no random variation. */
+    masterIntensity?: number;
+    /** Callback fired when effects are updated */
+    onEffectsUpdate?: (effects: any) => void;
     className?: string;
 }

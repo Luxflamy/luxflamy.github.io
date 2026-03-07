@@ -39,6 +39,8 @@ export const FRAGMENT_SHADER_COMBINED = `
   uniform float rareGlitchIntensity;  // Rare sync errors
   uniform float interferenceIntensity; // New: Scrolling noise/distortion bands
   uniform float jitterIntensity;       // New: Random line jitter
+  uniform vec3 u_bgColor;              // New: Base background color
+  uniform float zoom;                  // New: Zoom factor
   
   // Wave Distortion Feature
   uniform bool wavesEnabled;
@@ -69,7 +71,9 @@ export const FRAGMENT_SHADER_COMBINED = `
 
   void main() {
     float timeScaled = time * 0.6; // Reduced from 1.5 for a slower base frequency
-    vec2 uv = vUv;
+    
+    // 0. Zoom & Center (Hide distorted edges)
+    vec2 uv = (vUv - 0.5) * (1.0 / max(0.1, zoom)) + 0.5;
     
     // 1. Barrel Distortion (Curvature)
     vec2 curvedUV = barrelDistortion(uv, curvature * 0.15);
@@ -115,10 +119,15 @@ export const FRAGMENT_SHADER_COMBINED = `
       caAmount += mouseEffect * effectScale * 0.02;
     }
 
+    vec3 texColor = texture2D(u_texture, curvedUV).rgb;
     float r = texture2D(u_texture, curvedUV + vec2(caAmount, 0.0)).r;
     float g = texture2D(u_texture, curvedUV).g;
     float b = texture2D(u_texture, curvedUV - vec2(caAmount, 0.0)).b;
     vec3 color = vec3(r, g, b);
+    
+    // Blend with base color (Option 1)
+    float alpha = texture2D(u_texture, curvedUV).a;
+    color = mix(u_bgColor, color, alpha);
 
     // 7. Signal Noise (Fine-grained snow)
     float snow = (random(curvedUV + timeScaled) - 0.5) * 0.15 * interferenceIntensity;

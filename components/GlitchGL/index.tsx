@@ -167,6 +167,10 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             gl.uniform1f(gl.getUniformLocation(p, 'interferenceIntensity'), crt.interferenceIntensity ?? 0.0);
             gl.uniform1f(gl.getUniformLocation(p, 'jitterIntensity'), crt.jitterIntensity ?? 0.0);
 
+            const bgColor = crt.baseColor || [0, 0, 0];
+            gl.uniform3f(gl.getUniformLocation(p, 'u_bgColor'), bgColor[0], bgColor[1], bgColor[2]);
+            gl.uniform1f(gl.getUniformLocation(p, 'zoom'), crt.zoom ?? 1.0);
+
             const { waves = {} } = effects;
             gl.uniform1i(gl.getUniformLocation(p, 'wavesEnabled'), waves.enabled ? 1 : 0);
             gl.uniform1f(gl.getUniformLocation(p, 'waveAmplitude'), waves.amplitude ?? 0.02);

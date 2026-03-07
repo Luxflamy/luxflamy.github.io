@@ -15,7 +15,9 @@ export function GlitchRandomizer({
     ranges,
     baseEffects = {},
     children,
-    smoothing = 0.1, // 0 = jump immediately, 1 = never reach target
+    smoothing = 0.1,
+    masterIntensity = 0.5, // New master control
+    onEffectsUpdate,
     className = ''
 }: GlitchRandomizerProps) {
     const [currentEffects, setCurrentEffects] = useState<GlitchEffects>(baseEffects);
@@ -54,7 +56,12 @@ export function GlitchRandomizer({
             Object.keys(ranges).forEach(key => {
                 const range = ranges[key as keyof GlitchRandomizerRanges];
                 if (range) {
-                    newTargets[key] = randomBetween(range[0], range[1]);
+                    let val = randomBetween(range[0], range[1]);
+                    // Apply master scale to all except brightness (to keep screen visible)
+                    if (!key.includes('brightness')) {
+                        val *= masterIntensity;
+                    }
+                    newTargets[key] = val;
                 }
             });
             targetValuesRef.current = {
@@ -114,7 +121,13 @@ export function GlitchRandomizer({
                     }
                 });
 
+                // Update glow state if it was randomized
+                if (newCurrent['crt.glowIntensity'] !== undefined) {
+                    // Handled via callback for external effects like SVG filters
+                }
+
                 setCurrentEffects(reconstructedEffects);
+                if (onEffectsUpdate) onEffectsUpdate(reconstructedEffects);
             }
 
             animationFrameRef.current = requestAnimationFrame(animate);

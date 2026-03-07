@@ -16,6 +16,8 @@ export interface GlitchEffects {
         rareGlitchIntensity?: number;
         interferenceIntensity?: number;
         jitterIntensity?: number;
+        baseColor?: [number, number, number]; // RGB normalized [0-1]
+        zoom?: number; // Zoom level to hide distorted edges
     };
     waves?: {
         enabled?: boolean;
