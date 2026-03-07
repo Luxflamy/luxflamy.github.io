@@ -24,6 +24,8 @@ export function GlitchRandomizer({
 }: GlitchRandomizerProps) {
     const [currentEffects, setCurrentEffects] = useState<GlitchEffects>(baseEffects);
     const [scrambleActive, setScrambleActive] = useState(false);
+    const [burstStartedAt, setBurstStartedAt] = useState(0);
+    const [burstDurationMs, setBurstDurationMs] = useState(1);
 
     const targetValuesRef = useRef<Record<string, number>>({});
     const currentValuesRef = useRef<Record<string, number>>({});
@@ -152,8 +154,10 @@ export function GlitchRandomizer({
             if (!trigger || !duration || trigger.length < 2 || duration.length < 2) return;
             const delayMs = randomBetween(trigger[0], trigger[1]);
             scrambleTimeoutRef.current = setTimeout(() => {
-                setScrambleActive(true);
                 const durationMs = randomBetween(duration[0], duration[1]);
+                setBurstStartedAt(Date.now());
+                setBurstDurationMs(durationMs);
+                setScrambleActive(true);
                 scrambleTimeoutRef.current = setTimeout(() => {
                     setScrambleActive(false);
                     scheduleNext();
@@ -166,10 +170,18 @@ export function GlitchRandomizer({
         };
     }, []);
 
+    const scramblePayload =
+        scrambleTriggerRangeMs && scrambleDurationRangeMs
+            ? {
+                scrambleActive,
+                scrambleBurstStartedAt: burstStartedAt,
+                scrambleBurstDurationMs: burstDurationMs,
+            }
+            : {};
     const clonedChild = React.isValidElement(children)
         ? React.cloneElement(children, {
             effects: currentEffects,
-            ...(scrambleTriggerRangeMs && scrambleDurationRangeMs ? { scrambleActive } : {}),
+            ...scramblePayload,
         } as any)
         : children;
 

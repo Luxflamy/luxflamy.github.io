@@ -7,6 +7,8 @@ import { getScrambledText, getDecodeOrder } from '@/components/ScrambleText/util
 import type { ScrambleMode, ScrambleOptions } from '@/components/ScrambleText/types';
 import { PRESET_HERO_FLICKER } from '@/lib/scramblePresets';
 
+const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
+
 interface GlitchGLProps {
     src?: string;
     text?: string;
@@ -20,6 +22,10 @@ interface GlitchGLProps {
     scrambleOptions?: ScrambleOptions;
     /** 由 GlitchRandomizer 注入：为 false 时显示正常文字，为 true 时运行乱码；不传则保持原逻辑（解码后持续 flicker） */
     scrambleActive?: boolean;
+    /** 本段乱码开始时间戳，与 scrambleBurstDurationMs 一起算 burstProgress */
+    scrambleBurstStartedAt?: number;
+    /** 本段乱码持续 ms */
+    scrambleBurstDurationMs?: number;
 }
 
 const DECODE_DURATION_MS = 2000;
@@ -33,6 +39,8 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     scrambleMode = 'off',
     scrambleOptions = {},
     scrambleActive,
+    scrambleBurstStartedAt = 0,
+    scrambleBurstDurationMs = 1,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -53,6 +61,10 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     /** 由父组件传入 scrambleActive 时只做 flicker，不做 2s 解码 */
     const useScrambleScheduleRef = useRef(scrambleActive !== undefined);
     useScrambleScheduleRef.current = scrambleActive !== undefined;
+    const burstStartedAtRef = useRef(scrambleBurstStartedAt);
+    const burstDurationMsRef = useRef(scrambleBurstDurationMs);
+    burstStartedAtRef.current = scrambleBurstStartedAt;
+    burstDurationMsRef.current = scrambleBurstDurationMs;
 
     const createTextTexture = (gl: WebGLRenderingContext, text: string, width: number, height: number) => {
         const textCanvas = document.createElement('canvas');
@@ -159,7 +171,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             }
         };
 
-        let scrambleIntervalId: ReturnType<typeof setInterval> | null = null;
+        let scrambleTimerId: ReturnType<typeof setTimeout> | null = null;
         const runScramble = scrambleActiveRef.current !== false;
         if (text && scrambleMode === 'auto' && runScramble) {
             startTimeRef.current = Date.now();
@@ -181,16 +193,38 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                     mode = 'flicker';
                     progress = 0;
                 }
+                const o = opts();
+                const burstProgress =
+                    useScrambleScheduleRef.current &&
+                    burstDurationMsRef.current > 0
+                        ? Math.min(
+                            1,
+                            Math.max(
+                                0,
+                                (Date.now() - burstStartedAtRef.current) /
+                                    burstDurationMsRef.current
+                            )
+                        )
+                        : undefined;
                 displayTextRef.current = getScrambledText(
                     text,
                     mode,
                     progress,
-                    opts(),
-                    decodeOrderRef.current ?? undefined
+                    o,
+                    decodeOrderRef.current ?? undefined,
+                    burstProgress
                 );
             };
-            tick();
-            scrambleIntervalId = setInterval(tick, opts().refreshInterval ?? 50);
+            const scheduleNext = () => {
+                tick();
+                if (scrambleActiveRef.current === false) return;
+                const o = opts();
+                const delayMs = o.refreshIntervalRangeMs && o.refreshIntervalRangeMs.length >= 2
+                    ? randomBetween(o.refreshIntervalRangeMs[0], o.refreshIntervalRangeMs[1])
+                    : (o.refreshInterval ?? 50);
+                scrambleTimerId = setTimeout(scheduleNext, delayMs);
+            };
+            scheduleNext();
         }
         if (text && scrambleMode === 'auto' && !runScramble) {
             displayTextRef.current = text;
@@ -264,7 +298,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(frameIdRef.current);
-            if (scrambleIntervalId) clearInterval(scrambleIntervalId);
+            if (scrambleTimerId) clearTimeout(scrambleTimerId);
             if (glRef.current && textureRef.current) {
                 glRef.current.deleteTexture(textureRef.current);
             }

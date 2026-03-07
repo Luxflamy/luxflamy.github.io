@@ -4,13 +4,26 @@ export type ScrambleMode = 'idle' | 'scramble' | 'decode' | 'encode' | 'flicker'
 /** 解码顺序 */
 export type DecodeOrder = 'sequential' | 'random' | 'center-out';
 
+export type RefreshIntervalRangeMs = [number, number];
+
+/** flicker 模式下每次参与乱码的字符个数范围 [min, max]，与 flickerProbability 二选一 */
+export type FlickerCountRange = [number, number];
+
 export interface ScrambleOptions {
   /** 乱码字符集 */
   scrambleChars?: string;
-  /** 刷新间隔（ms） */
+  /** 刷新间隔（ms），与 refreshIntervalRangeMs 二选一 */
   refreshInterval?: number;
-  /** flicker 模式下每字符每帧乱码概率 0-1 */
+  /** 刷新间隔范围 [min, max] ms，每次 tick 后随机取延迟，节奏时快时慢 */
+  refreshIntervalRangeMs?: RefreshIntervalRangeMs;
+  /** flicker 模式下每字符每帧乱码概率 0-1，与 flickerCountRange 二选一 */
   flickerProbability?: number;
+  /** flicker 模式下每次仅固定个数位置乱码 [min, max]，如 [2,3] 表示每帧 2～3 个字符在变 */
+  flickerCountRange?: FlickerCountRange;
+  /** 段初参与乱码的个数范围，与 flickerCountRangeEnd、burstProgress 一起实现「从多到少逐步确定」 */
+  flickerCountRangeStart?: FlickerCountRange;
+  /** 段末参与乱码的个数范围 */
+  flickerCountRangeEnd?: FlickerCountRange;
   /** 解码/编码顺序 */
   decodeOrder?: DecodeOrder;
   /** 空格是否参与乱码（false 则空格始终保留） */

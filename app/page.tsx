@@ -63,8 +63,9 @@ export default function Home() {
               text="HELLO WORLD"
               scrambleMode="auto"
               scrambleOptions={{
-                flickerProbability: 0.08,
-                refreshInterval: 50,
+                flickerCountRangeStart: [6, 8],
+                flickerCountRangeEnd: [0, 2],
+                refreshIntervalRangeMs: [40, 180],
               }}
               className="w-full h-full opacity-80"
             />
