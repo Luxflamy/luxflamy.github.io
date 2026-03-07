@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+    @keyframes scan-slow {
+        0% {
+            transform: translateY(-100%);
+        }
+
+        100% {
+            transform: translateY(200%);
+        }
+    }
+
+    .animate-scan-slow {
+        animation: scan-slow 3s linear infinite;
+    }
+}
+
+body {
+    @apply bg-white dark:bg-black transition-colors duration-500;
+}
+
+/* Custom selection color for that cyber feel */
+::selection {
+    @apply bg-pink-500/30 text-white;
+}
