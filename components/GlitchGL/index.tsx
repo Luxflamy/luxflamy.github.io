@@ -26,6 +26,8 @@ interface GlitchGLProps {
     scrambleBurstStartedAt?: number;
     /** 本段乱码持续 ms */
     scrambleBurstDurationMs?: number;
+    /** 电视内文字垂直偏移（px），由 useWheelScrollOffset 的 offsetRef 传入，正数=文字上移 */
+    contentOffsetYRef?: React.RefObject<number>;
 }
 
 const DECODE_DURATION_MS = 2000;
@@ -41,6 +43,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     scrambleActive,
     scrambleBurstStartedAt = 0,
     scrambleBurstDurationMs = 1,
+    contentOffsetYRef,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -66,7 +69,9 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     burstStartedAtRef.current = scrambleBurstStartedAt;
     burstDurationMsRef.current = scrambleBurstDurationMs;
 
-    const createTextTexture = (gl: WebGLRenderingContext, text: string, width: number, height: number) => {
+    const lastOffsetYRef = useRef(0);
+
+    const createTextTexture = (gl: WebGLRenderingContext, text: string, width: number, height: number, offsetY: number = 0) => {
         const textCanvas = document.createElement('canvas');
         textCanvas.width = width;
         textCanvas.height = height;
@@ -77,17 +82,23 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Fix y-flipping by inverting the context or using a simpler approach
         ctx.save();
         ctx.scale(1, -1);
         ctx.translate(0, -height);
 
-        // Dynamic font size - Reduced multiplier from 0.15 to 0.08 for smaller text
         const fontSize = Math.min(width * 0.08, height * 0.2);
+        const lineHeight = fontSize * 1.5;
         ctx.font = `900 ${fontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = 'white';
         ctx.letterSpacing = '-1px';
-        ctx.fillText(text, width / 2, height / 2);
+
+        const lines = text.split('\n');
+        const totalHeight = (lines.length - 1) * lineHeight;
+        const startY = height / 2 + offsetY + totalHeight / 2;
+        lines.forEach((line, i) => {
+            const y = startY - i * lineHeight;
+            ctx.fillText(line.trim(), width / 2, y);
+        });
         ctx.restore();
 
         const tex = gl.createTexture();
@@ -163,10 +174,11 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             gl.viewport(0, 0, canvas.width, canvas.height);
 
             if (text) {
+                const offsetY = contentOffsetYRef?.current ?? 0;
                 if (scrambleMode !== 'auto') {
-                    createTextTexture(gl, text, canvas.width, canvas.height);
+                    createTextTexture(gl, text, canvas.width, canvas.height, offsetY);
                 } else {
-                    createTextTexture(gl, displayTextRef.current || text, canvas.width, canvas.height);
+                    createTextTexture(gl, displayTextRef.current || text, canvas.width, canvas.height, offsetY);
                 }
             }
         };
@@ -281,12 +293,20 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             gl.uniform1f(gl.getUniformLocation(p, 'radiusPx'), (interaction.radius || 100) * (window.devicePixelRatio || 1));
             gl.uniform1f(gl.getUniformLocation(p, 'effectScale'), interaction.intensity || 1.0);
 
+            const offsetY = contentOffsetYRef?.current ?? 0;
             if (text && scrambleMode === 'auto') {
                 if (scrambleActiveRef.current === false) displayTextRef.current = text ?? '';
-                if (displayTextRef.current !== lastDisplayTextRef.current) {
-                    createTextTexture(gl, displayTextRef.current, canvas.width, canvas.height);
+                const textOrOffsetChanged =
+                    displayTextRef.current !== lastDisplayTextRef.current ||
+                    offsetY !== lastOffsetYRef.current;
+                if (textOrOffsetChanged) {
+                    createTextTexture(gl, displayTextRef.current, canvas.width, canvas.height, offsetY);
                     lastDisplayTextRef.current = displayTextRef.current;
+                    lastOffsetYRef.current = offsetY;
                 }
+            } else if (text && offsetY !== lastOffsetYRef.current) {
+                createTextTexture(gl, text, canvas.width, canvas.height, offsetY);
+                lastOffsetYRef.current = offsetY;
             }
 
             gl.bindTexture(gl.TEXTURE_2D, textureRef.current);

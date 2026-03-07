@@ -1,3 +1,5 @@
+import type { RefObject } from 'react';
+
 export type RandomRange = [number, number];
 
 export interface GlitchRandomizerRanges {
@@ -47,4 +49,6 @@ export interface GlitchRandomizerProps {
     scrambleTriggerRangeMs?: TimeRangeMs;
     /** 乱码单次持续时长范围 [min, max] ms */
     scrambleDurationRangeMs?: TimeRangeMs;
+    /** 透传给子组件（如 GlitchGL）的 contentOffsetYRef，用于电视内文字上下滚动 */
+    contentOffsetYRef?: RefObject<number>;
 }

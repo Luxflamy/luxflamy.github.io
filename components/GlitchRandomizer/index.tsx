@@ -21,6 +21,7 @@ export function GlitchRandomizer({
     className = '',
     scrambleTriggerRangeMs,
     scrambleDurationRangeMs,
+    contentOffsetYRef,
 }: GlitchRandomizerProps) {
     const [currentEffects, setCurrentEffects] = useState<GlitchEffects>(baseEffects);
     const [scrambleActive, setScrambleActive] = useState(false);
@@ -182,6 +183,7 @@ export function GlitchRandomizer({
         ? React.cloneElement(children, {
             effects: currentEffects,
             ...scramblePayload,
+            ...(contentOffsetYRef != null ? { contentOffsetYRef } : {}),
         } as any)
         : children;
 

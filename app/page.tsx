@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import GlitchGL from '@/components/GlitchGL';
 import { GlitchRandomizer } from '@/components/GlitchRandomizer';
 import { BloomProvider } from '@/components/Bloom';
+import { useWheelScrollOffset } from '@/hooks/useWheelScrollOffset';
 
 const SCRAMBLE_TRIGGER_MS: [number, number] = [10000, 20000];
 const SCRAMBLE_DURATION_MS: [number, number] = [2000, 4000];
@@ -13,6 +14,12 @@ export default function Home() {
   const [glowIntensity, setGlowIntensity] = useState(4);
   const scrambleTriggerRangeMs = useMemo(() => SCRAMBLE_TRIGGER_MS, []);
   const scrambleDurationRangeMs = useMemo(() => SCRAMBLE_DURATION_MS, []);
+  const { containerRef, offsetRef } = useWheelScrollOffset({
+    clampPx: 80,
+    sensitivity: 0.4,
+    inertia: true,
+    decayFactor: 0.92,
+  });
 
   useEffect(() => setMounted(true), []);
 
@@ -20,10 +27,15 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 bg-black overflow-hidden font-mono text-white">
-      {/* Full screen filter effect */}
-      <div className="absolute inset-0 z-0">
+      {/* 视口层：捕获滚轮，电视内文字上下移动 */}
+      <div
+        ref={containerRef as React.RefObject<HTMLDivElement>}
+        className="absolute inset-0 overflow-hidden z-0"
+        style={{ touchAction: 'none' }}
+      >
         <BloomProvider id="hero-bloom" intensity={glowIntensity} threshold={0.3}>
           <GlitchRandomizer
+            contentOffsetYRef={offsetRef}
             intervalMs={2000}
             smoothing={0.98}
             masterIntensity={0.5}
@@ -60,7 +72,12 @@ export default function Home() {
             }}
           >
             <GlitchGL
-              text="HELLO WORLD"
+              text={`HELLO WORLD
+———
+Welcome
+Scroll with mouse wheel
+to preview vertical movement
+———`}
               scrambleMode="auto"
               scrambleOptions={{
                 flickerCountRangeStart: [6, 8],
