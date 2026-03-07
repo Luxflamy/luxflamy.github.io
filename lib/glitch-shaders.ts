@@ -109,9 +109,9 @@ export const FRAGMENT_SHADER_COMBINED = `
       return;
     }
 
-    // 6. Chromatic Aberration Pulse
+    // 6. Chromatic Aberration Pulse（最大偏移量已调小）
     float pulse = (sin(timeScaled * 0.5) * 0.5 + 0.5) * chromaticPulseIntensity;
-    float caAmount = 0.003 + pulse * 0.012;
+    float caAmount = 0.002 + pulse * 0.005;
     
     if (interactionEnabled) {
       float dist = length(gl_FragCoord.xy - vec2(mousePx.x, resolution.y - mousePx.y));

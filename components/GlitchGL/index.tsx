@@ -86,7 +86,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         ctx.scale(1, -1);
         ctx.translate(0, -height);
 
-        const fontSize = Math.min(width * 0.08, height * 0.2);
+        const fontSize = Math.min(width * 0.05, height * 0.12);
         const lineHeight = fontSize * 1.5;
         ctx.font = `900 ${fontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = 'white';
