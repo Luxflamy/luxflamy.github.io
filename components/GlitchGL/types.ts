@@ -14,6 +14,14 @@ export interface GlitchEffects {
         scanningBandIntensity?: number;
         chromaticPulseIntensity?: number;
         rareGlitchIntensity?: number;
+        interferenceIntensity?: number;
+        jitterIntensity?: number;
+    };
+    waves?: {
+        enabled?: boolean;
+        amplitude?: number;
+        frequency?: number;
+        speed?: number;
     };
 }
 

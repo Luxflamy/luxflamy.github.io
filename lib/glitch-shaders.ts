@@ -37,6 +37,14 @@ export const FRAGMENT_SHADER_COMBINED = `
   uniform float scanningBandIntensity;
   uniform float chromaticPulseIntensity; // Periodic CA pulse
   uniform float rareGlitchIntensity;  // Rare sync errors
+  uniform float interferenceIntensity; // New: Scrolling noise/distortion bands
+  uniform float jitterIntensity;       // New: Random line jitter
+  
+  // Wave Distortion Feature
+  uniform bool wavesEnabled;
+  uniform float waveAmplitude;
+  uniform float waveFrequency;
+  uniform float waveSpeed;
   
   // Interaction
   uniform bool interactionEnabled;
@@ -59,78 +67,86 @@ export const FRAGMENT_SHADER_COMBINED = `
     return st + 0.5;
   }
 
-  // --- Main Logic ---
   void main() {
+    float timeScaled = time * 0.6; // Reduced from 1.5 for a slower base frequency
     vec2 uv = vUv;
     
     // 1. Barrel Distortion (Curvature)
-    // We increase curvature slightly to give that bulbous tube look
     vec2 curvedUV = barrelDistortion(uv, curvature * 0.15);
     
-    // Critical: Clip the edges to simulate a physical mask
+    // 2. Electronic Jitter (Horizontal line shifts)
+    // Simulates unstable horizontal sync per line
+    float jitter = (random(vec2(timeScaled, floor(curvedUV.y * 100.0))) - 0.5) * jitterIntensity * 0.01;
+    curvedUV.x += jitter;
+
+    // 3. Rare Glitch (Vertical/Horizontal sync jump)
+    float rareTrigger = step(0.995, random(vec2(floor(timeScaled * 0.4), 456.0)));
+    float jump = (random(vec2(timeScaled, 0.0)) - 0.5) * rareTrigger * rareGlitchIntensity * 0.1;
+    curvedUV.x += jump;
+
+    // 4. Scrolling Interference Bands
+    // Wide horizontal bands that cause localized noise and offset
+    if (interferenceIntensity > 0.0) {
+      float interference = sin(curvedUV.y * 10.0 - timeScaled * 2.0) * 0.5 + 0.5;
+      interference = pow(interference, 4.0); // Make the band sharper
+      float offset = (random(vec2(timeScaled, floor(curvedUV.y * 50.0))) - 0.5) * interference * interferenceIntensity * 0.05;
+      curvedUV.x += offset;
+    }
+
+    // 5. Horizontal Wave Distortion (Legacy)
+    if (wavesEnabled) {
+      float wave = sin(curvedUV.y * waveFrequency + timeScaled * waveSpeed) * waveAmplitude;
+      curvedUV.x += wave;
+    }
+
+    // Critical: Clip the edges
     if (curvedUV.x < 0.0 || curvedUV.x > 1.0 || curvedUV.y < 0.0 || curvedUV.y > 1.0) {
       gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
       return;
     }
 
-    // 2. Rare Glitch / Sync Errors
-    float glitchTrigger = step(0.998, random(vec2(floor(time * 0.5), 123.0))); // Rare temporal trigger
-    float lineNoise = random(vec2(floor(curvedUV.y * 10.0), time)) * glitchTrigger * rareGlitchIntensity;
-    vec2 glitchUV = curvedUV + vec2(lineNoise * 0.05, 0.0);
-
-    // 3. Chromatic Aberration Pulse
-    // A slow sine wave pulse for the RGB offset
-    float pulse = (sin(time * 0.5) * 0.5 + 0.5) * chromaticPulseIntensity;
-    float caAmount = 0.005 + pulse * 0.015;
+    // 6. Chromatic Aberration Pulse
+    float pulse = (sin(timeScaled * 0.5) * 0.5 + 0.5) * chromaticPulseIntensity;
+    float caAmount = 0.003 + pulse * 0.012;
     
-    // Add interaction to CA if enabled
     if (interactionEnabled) {
-      vec2 logicalFrag = gl_FragCoord.xy / (resolution.x / resolution.x); // simple ratio
-      float dist = length((gl_FragCoord.xy) - vec2(mousePx.x, resolution.y - mousePx.y));
-      float mouseEffect = 1.0 - smoothstep(0.0, radiusPx * 2.0, dist);
+      float dist = length(gl_FragCoord.xy - vec2(mousePx.x, resolution.y - mousePx.y));
+      float mouseEffect = 1.0 - smoothstep(0.0, radiusPx * 2.5, dist);
       caAmount += mouseEffect * effectScale * 0.02;
     }
 
-    float r = texture2D(u_texture, glitchUV + vec2(caAmount, 0.0)).r;
-    float g = texture2D(u_texture, glitchUV).g;
-    float b = texture2D(u_texture, glitchUV - vec2(caAmount, 0.0)).b;
+    float r = texture2D(u_texture, curvedUV + vec2(caAmount, 0.0)).r;
+    float g = texture2D(u_texture, curvedUV).g;
+    float b = texture2D(u_texture, curvedUV - vec2(caAmount, 0.0)).b;
     vec3 color = vec3(r, g, b);
 
-    // 4. Pixelation (if enabled)
-    if (pixelationEnabled) {
-      vec2 grid = resolution / pixelSize;
-      vec2 pUV = floor(curvedUV * grid) / grid;
-      color = texture2D(u_texture, pUV).rgb;
-    }
+    // 7. Signal Noise (Fine-grained snow)
+    float snow = (random(curvedUV + timeScaled) - 0.5) * 0.15 * interferenceIntensity;
+    color += snow;
 
-    // 5. Dynamic Scanning Bands
-    // Wide bands of brightness that slowly drift downwards
-    float band = sin(curvedUV.y * 5.0 - time * 0.5) * 0.5 + 0.5;
-    color *= 1.0 + (band * 0.15 * scanningBandIntensity);
+    // 8. Dynamic Scanning Bands (Brightness drift)
+    float band = sin(curvedUV.y * 3.0 - timeScaled * 1.5) * 0.5 + 0.5;
+    color *= 1.0 + (band * 0.2 * scanningBandIntensity);
 
-    // 6. Scanlines
-    float scanline = sin(curvedUV.y * resolution.y * 0.5) * 0.5 + 0.5;
+    // 9. Scanlines
+    float scanline = sin(curvedUV.y * resolution.y * 0.8) * 0.5 + 0.5;
     color *= mix(1.0 - scanlineIntensity, 1.0, scanline);
 
-    // 7. RGB Phosphor Mask (3px stripes)
-    // We use gl_FragCoord to ensure the stripes stay locked to screen pixels
-    float xPos = gl_FragCoord.x;
+    // 10. RGB Phosphor Mask
+    float m = mod(gl_FragCoord.x, 3.0);
     vec3 mask = vec3(1.0);
-    float m = mod(xPos, 3.0);
-    if (m < 1.0) mask = vec4(1.2, 0.8, 0.8, 1.0).rgb; // Reddish
-    else if (m < 2.0) mask = vec4(0.8, 1.2, 0.8, 1.0).rgb; // Greenish
-    else mask = vec4(0.8, 0.8, 1.2, 1.0).rgb; // Bluish
-    
+    if (m < 1.0) mask = vec3(1.15, 0.9, 0.9);
+    else if (m < 2.0) mask = vec3(0.9, 1.15, 0.9);
+    else mask = vec3(0.9, 0.9, 1.15);
     color = mix(color, color * mask, phosphorIntensity);
 
-    // 8. Vignette (Darkened corners)
+    // 11. Vignette (Dark corners)
     vec2 vuv = curvedUV * (1.0 - curvedUV.yx);
-    float vig = vuv.x * vuv.y * 15.0;
-    vig = pow(vig, 0.25);
+    float vig = pow(vuv.x * vuv.y * 15.0, 0.2);
     color *= mix(1.0, vig, vignetteIntensity);
 
-    // 9. Global Brightness & Flicker
-    float flicker = 1.0 + (random(vec2(time, 0.0)) - 0.5) * 0.02;
+    // 12. Global Brightness & Flicker
+    float flicker = 1.0 + (random(vec2(timeScaled, 0.0)) - 0.5) * 0.03;
     color *= brightness * flicker;
 
     gl_FragColor = vec4(color, 1.0);
