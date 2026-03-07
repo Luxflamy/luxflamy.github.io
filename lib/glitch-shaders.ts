@@ -1,6 +1,6 @@
 /**
- * WebGL Shaders for GlitchGL
- * Extracted from glitchGL.js
+ * Advanced WebGL Shaders for GlitchGL (Ultimate CRT Edition)
+ * Inspired by retro CRT monitors and glitch aesthetics.
  */
 
 export const VERTEX_SHADER = `
@@ -8,21 +8,10 @@ export const VERTEX_SHADER = `
   attribute vec2 position;
   attribute vec2 uv;
   uniform vec2 resolution;
-  uniform float textureAspect;
-  uniform bool aspectCorrectionEnabled;
   varying vec2 vUv;
   
   void main() {
-    vec2 newUv = uv;
-    if (aspectCorrectionEnabled && resolution.y > 0.0 && textureAspect > 0.0) {
-        float containerAspect = resolution.x / resolution.y;
-        if (containerAspect < textureAspect) {
-            newUv.x = (uv.x - 0.5) * (containerAspect / textureAspect) + 0.5;
-        } else {
-            newUv.y = (uv.y - 0.5) * (textureAspect / containerAspect) + 0.5;
-        }
-    }
-    vUv = newUv;
+    vUv = uv;
     gl_Position = vec4(position, 0.0, 1.0);
   }
 `;
@@ -32,183 +21,118 @@ export const FRAGMENT_SHADER_COMBINED = `
   uniform sampler2D u_texture;
   uniform highp vec2 resolution;
   uniform float time;
-  uniform float intensity;
   
+  // Controls
   uniform bool pixelationEnabled;
-  uniform bool crtEnabled;
-  uniform bool glitchEnabled;
-  
-  // PIXELATION UNIFORMS
   uniform float pixelSize;
-  uniform int pixelShape;
-  uniform int bitDepth;
-  uniform int dithering;
-  uniform int pixelDirection;
-  uniform int isText;
-  uniform bool pixelSizeInteractive;
   
-  // CRT UNIFORMS
+  uniform bool crtEnabled;
   uniform float scanlineIntensity;
-  uniform float scanlineThickness;
-  uniform float scanlineCount;
-  uniform float phosphorGlow;
   uniform float curvature;
-  uniform float chromaticAberration;
   uniform float brightness;
-  uniform bool flicker;
-  uniform float flickerIntensity;
-  uniform bool lineMovement;
-  uniform float lineSpeed;
-  uniform int lineDirection;
-  uniform bool chromaticAberrationInteractive;
-  uniform bool scanlinesInteractive;
-  uniform bool phosphorGlowInteractive;
-  uniform bool curvatureInteractive;
   
-  // GLITCH UNIFORMS
-  uniform float rgbShift;
-  uniform float digitalNoise;
-  uniform float lineDisplacement;
-  uniform float bitCrushDepth;
-  uniform float signalDropoutFreq;
-  uniform float signalDropoutSize;
-  uniform float syncErrorFreq;
-  uniform float syncErrorAmount;
-  uniform float interferenceSpeed;
-  uniform float interferenceIntensity;
-  uniform float frameGhostAmount;
-  uniform float stutterFreq;
-  uniform float datamoshStrength;
-  uniform bool rgbShiftInteractive;
-  uniform bool digitalNoiseInteractive;
-  uniform bool lineDisplacementInteractive;
-  uniform bool bitCrushInteractive;
-  uniform bool signalDropoutInteractive;
-  uniform bool syncErrorsInteractive;
-  uniform bool interferenceLinesInteractive;
-  uniform bool frameGhostingInteractive;
-  uniform bool stutterFreezeInteractive;
-  uniform bool datamoshingInteractive;
-
-  // SHARED INTERACTION UNIFORMS
+  // Advanced Features from User_note.md
+  uniform float phosphorIntensity; // RGB Mask strength
+  uniform float vignetteIntensity;
+  uniform float scanningBandIntensity;
+  uniform float chromaticPulseIntensity; // Periodic CA pulse
+  uniform float rareGlitchIntensity;  // Rare sync errors
+  
+  // Interaction
   uniform bool interactionEnabled;
-  uniform int interactionShape;
   uniform vec2 mousePx;
   uniform float radiusPx;
-  uniform float pixelRatio;
   uniform float effectScale;
   
   varying vec2 vUv;
-  
+
+  // --- Utilities ---
   float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
   }
-  
-  float random3(vec3 st) {
-    return fract(sin(dot(st.xyz, vec3(12.9898, 78.233, 37.719))) * 43758.5453123);
-  }
-  
-  float getInteractionEffect(vec2 fragCoord, vec2 mousePositionPx, float radius) {
-    vec2 logicalFragCoord = fragCoord / pixelRatio;
-    vec2 offset = logicalFragCoord - mousePositionPx;
-    float dist = length(offset);
-    
-    float scaledRadius = radius * effectScale;
-    if (scaledRadius <= 0.0) return 0.0;
 
-    if (interactionShape == 1) {
-      float maxDist = max(abs(offset.x), abs(offset.y));
-      return 1.0 - smoothstep(0.0, scaledRadius, maxDist);
-    } else if (interactionShape == 2) {
-      float diamondDist = abs(offset.x) + abs(offset.y);
-      return 1.0 - smoothstep(0.0, scaledRadius, diamondDist);
-    } else {
-      return 1.0 - smoothstep(0.0, scaledRadius, dist);
-    }
-  }
-  
-  vec3 applyBitDepth(vec3 color) {
-    if (bitDepth == 1) {
-      float gray = dot(color, vec3(0.299, 0.587, 0.114));
-      return vec3(step(0.5, gray));
-    } else if (bitDepth == 2) {
-      return floor(color * 15.0) / 15.0;
-    } else if (bitDepth == 3) {
-      return floor(color * 255.0) / 255.0;
-    }
-    return color;
-  }
-  
-  vec3 applyDithering(vec3 color, vec2 screenPos) {
-    if (dithering == 1) {
-      vec3 quantized = floor(color * 8.0) / 8.0;
-      vec3 error = color - quantized;
-      float threshold = random(screenPos) * 0.5;
-      return quantized + step(threshold, length(error)) * (error * 0.5);
-    }
-    return color;
+  vec2 barrelDistortion(vec2 uv, float k) {
+    if (k == 0.0) return uv;
+    vec2 st = uv - 0.5;
+    float r2 = dot(st, st);
+    st *= 1.0 + k * r2 + k * k * r2 * r2;
+    return st + 0.5;
   }
 
-  float getPixelShapeMask(vec2 pixelUV) {
-    vec2 center = vec2(0.5);
-    vec2 offset = pixelUV - center;
-    if (pixelShape == 1) return 1.0 - smoothstep(0.3, 0.5, length(offset));
-    if (pixelShape == 2) return 1.0 - smoothstep(0.3, 0.5, abs(offset.x) + abs(offset.y));
-    return 1.0;
-  }
-
-  vec4 applyPixelation(vec2 uv, vec4 inputColor, float mouseEffect, float interactionMultiplier) {
-    float effectivePixelSize = pixelSize;
-    if (interactionEnabled && pixelSizeInteractive) {
-      effectivePixelSize = max(1.0, pixelSize * (1.0 - mouseEffect * intensity * 0.9));
-    }
-    vec2 referenceRes = vec2(1920.0, 1080.0);
-    float scaleFactor = min(resolution.x / referenceRes.x, resolution.y / referenceRes.y);
-    float normalizedPixelSize = effectivePixelSize * scaleFactor;
-    vec2 pixelCount = resolution / normalizedPixelSize;
-    vec2 pixelated_uv = floor(uv * pixelCount) / pixelCount;
-    vec4 pixelatedSample = texture2D(u_texture, pixelated_uv);
-    vec3 color = pixelatedSample.rgb;
-    float alpha = pixelatedSample.a;
-    if (pixelShape != 0 && alpha > 0.0) {
-      vec2 pixelUV = fract(uv * pixelCount);
-      float shapeMask = getPixelShapeMask(pixelUV);
-      color = mix(inputColor.rgb, pixelatedSample.rgb, shapeMask);
-    }
-    color = applyBitDepth(color);
-    color = applyDithering(color, gl_FragCoord.xy);
-    return vec4(color, alpha);
-  }
-
+  // --- Main Logic ---
   void main() {
     vec2 uv = vUv;
-    float mouseEffect = 0.0;
-    float interactionMultiplier = 1.0;
+    
+    // 1. Barrel Distortion (Curvature)
+    // We increase curvature slightly to give that bulbous tube look
+    vec2 curvedUV = barrelDistortion(uv, curvature * 0.15);
+    
+    // Critical: Clip the edges to simulate a physical mask
+    if (curvedUV.x < 0.0 || curvedUV.x > 1.0 || curvedUV.y < 0.0 || curvedUV.y > 1.0) {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      return;
+    }
+
+    // 2. Rare Glitch / Sync Errors
+    float glitchTrigger = step(0.998, random(vec2(floor(time * 0.5), 123.0))); // Rare temporal trigger
+    float lineNoise = random(vec2(floor(curvedUV.y * 10.0), time)) * glitchTrigger * rareGlitchIntensity;
+    vec2 glitchUV = curvedUV + vec2(lineNoise * 0.05, 0.0);
+
+    // 3. Chromatic Aberration Pulse
+    // A slow sine wave pulse for the RGB offset
+    float pulse = (sin(time * 0.5) * 0.5 + 0.5) * chromaticPulseIntensity;
+    float caAmount = 0.005 + pulse * 0.015;
+    
+    // Add interaction to CA if enabled
     if (interactionEnabled) {
-      mouseEffect = getInteractionEffect(gl_FragCoord.xy, mousePx, radiusPx);
-      interactionMultiplier = 1.0 + (mouseEffect * intensity);
+      vec2 logicalFrag = gl_FragCoord.xy / (resolution.x / resolution.x); // simple ratio
+      float dist = length((gl_FragCoord.xy) - vec2(mousePx.x, resolution.y - mousePx.y));
+      float mouseEffect = 1.0 - smoothstep(0.0, radiusPx * 2.0, dist);
+      caAmount += mouseEffect * effectScale * 0.02;
     }
 
-    vec2 curvedUV = uv;
-    if (crtEnabled && curvature > 0.0) {
-      vec2 cuv = uv * 2.0 - 1.0;
-      vec2 offset = abs(cuv.yx) * curvature / 20.0;
-      cuv = cuv + cuv * offset * offset;
-      curvedUV = cuv * 0.5 + 0.5;
-    }
+    float r = texture2D(u_texture, glitchUV + vec2(caAmount, 0.0)).r;
+    float g = texture2D(u_texture, glitchUV).g;
+    float b = texture2D(u_texture, glitchUV - vec2(caAmount, 0.0)).b;
+    vec3 color = vec3(r, g, b);
 
-    vec4 color = texture2D(u_texture, curvedUV);
+    // 4. Pixelation (if enabled)
     if (pixelationEnabled) {
-      color = applyPixelation(curvedUV, color, mouseEffect, interactionMultiplier);
+      vec2 grid = resolution / pixelSize;
+      vec2 pUV = floor(curvedUV * grid) / grid;
+      color = texture2D(u_texture, pUV).rgb;
     }
 
-    // Simplified CRT effect for brightness/scanlines
-    if (crtEnabled) {
-      float scanline = sin(curvedUV.y * scanlineCount * 6.28) * 0.5 + 0.5;
-      color.rgb *= mix(1.0 - scanlineIntensity, 1.0, scanline);
-      color.rgb *= brightness;
-    }
+    // 5. Dynamic Scanning Bands
+    // Wide bands of brightness that slowly drift downwards
+    float band = sin(curvedUV.y * 5.0 - time * 0.5) * 0.5 + 0.5;
+    color *= 1.0 + (band * 0.15 * scanningBandIntensity);
 
-    gl_FragColor = color;
+    // 6. Scanlines
+    float scanline = sin(curvedUV.y * resolution.y * 0.5) * 0.5 + 0.5;
+    color *= mix(1.0 - scanlineIntensity, 1.0, scanline);
+
+    // 7. RGB Phosphor Mask (3px stripes)
+    // We use gl_FragCoord to ensure the stripes stay locked to screen pixels
+    float xPos = gl_FragCoord.x;
+    vec3 mask = vec3(1.0);
+    float m = mod(xPos, 3.0);
+    if (m < 1.0) mask = vec4(1.2, 0.8, 0.8, 1.0).rgb; // Reddish
+    else if (m < 2.0) mask = vec4(0.8, 1.2, 0.8, 1.0).rgb; // Greenish
+    else mask = vec4(0.8, 0.8, 1.2, 1.0).rgb; // Bluish
+    
+    color = mix(color, color * mask, phosphorIntensity);
+
+    // 8. Vignette (Darkened corners)
+    vec2 vuv = curvedUV * (1.0 - curvedUV.yx);
+    float vig = vuv.x * vuv.y * 15.0;
+    vig = pow(vig, 0.25);
+    color *= mix(1.0, vig, vignetteIntensity);
+
+    // 9. Global Brightness & Flicker
+    float flicker = 1.0 + (random(vec2(time, 0.0)) - 0.5) * 0.02;
+    color *= brightness * flicker;
+
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
