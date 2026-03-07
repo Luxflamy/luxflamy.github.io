@@ -3,6 +3,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GlitchEffects, GlitchInteraction, GlitchOptions } from './types';
 import { VERTEX_SHADER, FRAGMENT_SHADER_COMBINED } from '@/lib/glitch-shaders';
+import { getScrambledText, getDecodeOrder } from '@/components/ScrambleText/utils';
+import type { ScrambleMode, ScrambleOptions } from '@/components/ScrambleText/types';
+import { PRESET_HERO_FLICKER } from '@/lib/scramblePresets';
 
 interface GlitchGLProps {
     src?: string;
@@ -11,14 +14,25 @@ interface GlitchGLProps {
     interaction?: GlitchInteraction;
     options?: GlitchOptions;
     className?: string;
+    /** 启用自动乱码时：先 decode 再 flicker，不传则仅用 text 静态绘制 */
+    scrambleMode?: 'off' | 'auto';
+    /** 乱码配置，scrambleMode='auto' 时生效 */
+    scrambleOptions?: ScrambleOptions;
+    /** 由 GlitchRandomizer 注入：为 false 时显示正常文字，为 true 时运行乱码；不传则保持原逻辑（解码后持续 flicker） */
+    scrambleActive?: boolean;
 }
+
+const DECODE_DURATION_MS = 2000;
 
 const GlitchGL: React.FC<GlitchGLProps> = ({
     src,
     text,
     effects = {},
     interaction = {},
-    className = ''
+    className = '',
+    scrambleMode = 'off',
+    scrambleOptions = {},
+    scrambleActive,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -28,6 +42,17 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     const textureRef = useRef<WebGLTexture | null>(null);
     const frameIdRef = useRef<number>(0);
     const mouseRef = useRef({ x: 0, y: 0 });
+    const displayTextRef = useRef<string>(text ?? '');
+    const lastDisplayTextRef = useRef<string>('');
+    const decodeOrderRef = useRef<number[] | null>(null);
+    const startTimeRef = useRef<number>(0);
+    const scrambleOptionsRef = useRef(scrambleOptions);
+    scrambleOptionsRef.current = scrambleOptions;
+    const scrambleActiveRef = useRef(scrambleActive);
+    scrambleActiveRef.current = scrambleActive;
+    /** 由父组件传入 scrambleActive 时只做 flicker，不做 2s 解码 */
+    const useScrambleScheduleRef = useRef(scrambleActive !== undefined);
+    useScrambleScheduleRef.current = scrambleActive !== undefined;
 
     const createTextTexture = (gl: WebGLRenderingContext, text: string, width: number, height: number) => {
         const textCanvas = document.createElement('canvas');
@@ -125,14 +150,54 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             canvas.height = rect.height * dpr;
             gl.viewport(0, 0, canvas.width, canvas.height);
 
-            // Re-render text texture if needed
             if (text) {
-                createTextTexture(gl, text, canvas.width, canvas.height);
+                if (scrambleMode !== 'auto') {
+                    createTextTexture(gl, text, canvas.width, canvas.height);
+                } else {
+                    createTextTexture(gl, displayTextRef.current || text, canvas.width, canvas.height);
+                }
             }
         };
 
+        let scrambleIntervalId: ReturnType<typeof setInterval> | null = null;
+        const runScramble = scrambleActiveRef.current !== false;
+        if (text && scrambleMode === 'auto' && runScramble) {
+            startTimeRef.current = Date.now();
+            displayTextRef.current = text;
+            const opts = () => ({ ...PRESET_HERO_FLICKER, ...scrambleOptionsRef.current });
+            decodeOrderRef.current = getDecodeOrder(text.length, opts().decodeOrder ?? 'sequential');
+            const tick = () => {
+                if (scrambleActiveRef.current === false) return;
+                const elapsed = Date.now() - startTimeRef.current;
+                let mode: ScrambleMode;
+                let progress: number;
+                if (useScrambleScheduleRef.current) {
+                    mode = 'flicker';
+                    progress = 0;
+                } else if (elapsed < DECODE_DURATION_MS) {
+                    mode = 'decode';
+                    progress = elapsed / DECODE_DURATION_MS;
+                } else {
+                    mode = 'flicker';
+                    progress = 0;
+                }
+                displayTextRef.current = getScrambledText(
+                    text,
+                    mode,
+                    progress,
+                    opts(),
+                    decodeOrderRef.current ?? undefined
+                );
+            };
+            tick();
+            scrambleIntervalId = setInterval(tick, opts().refreshInterval ?? 50);
+        }
+        if (text && scrambleMode === 'auto' && !runScramble) {
+            displayTextRef.current = text;
+        }
+
         if (text) {
-            handleResize(); // Initial resize and text draw
+            handleResize();
         } else if (src) {
             loadImageTexture(gl, src);
         }
@@ -182,6 +247,14 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             gl.uniform1f(gl.getUniformLocation(p, 'radiusPx'), (interaction.radius || 100) * (window.devicePixelRatio || 1));
             gl.uniform1f(gl.getUniformLocation(p, 'effectScale'), interaction.intensity || 1.0);
 
+            if (text && scrambleMode === 'auto') {
+                if (scrambleActiveRef.current === false) displayTextRef.current = text ?? '';
+                if (displayTextRef.current !== lastDisplayTextRef.current) {
+                    createTextTexture(gl, displayTextRef.current, canvas.width, canvas.height);
+                    lastDisplayTextRef.current = displayTextRef.current;
+                }
+            }
+
             gl.bindTexture(gl.TEXTURE_2D, textureRef.current);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             frameIdRef.current = requestAnimationFrame(animate);
@@ -191,11 +264,12 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(frameIdRef.current);
+            if (scrambleIntervalId) clearInterval(scrambleIntervalId);
             if (glRef.current && textureRef.current) {
                 glRef.current.deleteTexture(textureRef.current);
             }
         };
-    }, [src, text, effects, interaction]);
+    }, [src, text, effects, interaction, scrambleMode, scrambleActive]);
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!containerRef.current) return;

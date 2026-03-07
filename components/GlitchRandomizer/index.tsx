@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GlitchRandomizerProps, GlitchRandomizerRanges } from './types';
+import { GlitchRandomizerProps, GlitchRandomizerRanges, TimeRangeMs } from './types';
 import { GlitchEffects } from '../GlitchGL/types';
 
 /** Helper to generate random number between min and max */
@@ -16,17 +16,24 @@ export function GlitchRandomizer({
     baseEffects = {},
     children,
     smoothing = 0.1,
-    masterIntensity = 0.5, // New master control
+    masterIntensity = 0.5,
     onEffectsUpdate,
-    className = ''
+    className = '',
+    scrambleTriggerRangeMs,
+    scrambleDurationRangeMs,
 }: GlitchRandomizerProps) {
     const [currentEffects, setCurrentEffects] = useState<GlitchEffects>(baseEffects);
+    const [scrambleActive, setScrambleActive] = useState(false);
 
-    // We use refs to hold target values and smoothly animate towards them
     const targetValuesRef = useRef<Record<string, number>>({});
     const currentValuesRef = useRef<Record<string, number>>({});
     const animationFrameRef = useRef<number>();
     const intervalRef = useRef<NodeJS.Timeout>();
+    const scrambleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const triggerRangeRef = useRef<TimeRangeMs | undefined>(scrambleTriggerRangeMs);
+    const durationRangeRef = useRef<TimeRangeMs | undefined>(scrambleDurationRangeMs);
+    triggerRangeRef.current = scrambleTriggerRangeMs;
+    durationRangeRef.current = scrambleDurationRangeMs;
 
     useEffect(() => {
         // Initialize current values from base effects or range minimums
@@ -137,9 +144,33 @@ export function GlitchRandomizer({
         return () => cancelAnimationFrame(animationFrameRef.current!);
     }, [smoothing, baseEffects, intervalMs]);
 
-    // Clone the child GlitchGL component and inject the randomly animated effects
+    // Scramble schedule: run once on mount, read ranges from refs so parent re-renders do not clear the timer (high cohesion, low coupling)
+    useEffect(() => {
+        const scheduleNext = () => {
+            const trigger = triggerRangeRef.current;
+            const duration = durationRangeRef.current;
+            if (!trigger || !duration || trigger.length < 2 || duration.length < 2) return;
+            const delayMs = randomBetween(trigger[0], trigger[1]);
+            scrambleTimeoutRef.current = setTimeout(() => {
+                setScrambleActive(true);
+                const durationMs = randomBetween(duration[0], duration[1]);
+                scrambleTimeoutRef.current = setTimeout(() => {
+                    setScrambleActive(false);
+                    scheduleNext();
+                }, durationMs);
+            }, delayMs);
+        };
+        scheduleNext();
+        return () => {
+            if (scrambleTimeoutRef.current) clearTimeout(scrambleTimeoutRef.current);
+        };
+    }, []);
+
     const clonedChild = React.isValidElement(children)
-        ? React.cloneElement(children, { effects: currentEffects } as any)
+        ? React.cloneElement(children, {
+            effects: currentEffects,
+            ...(scrambleTriggerRangeMs && scrambleDurationRangeMs ? { scrambleActive } : {}),
+        } as any)
         : children;
 
     return (

@@ -25,6 +25,8 @@ export interface GlitchRandomizerRanges {
     'crt.glowIntensity'?: RandomRange;
 }
 
+export type TimeRangeMs = [number, number];
+
 export interface GlitchRandomizerProps {
     /** Update interval in milliseconds. If 0, randomization is disabled. */
     intervalMs?: number;
@@ -41,4 +43,8 @@ export interface GlitchRandomizerProps {
     /** Callback fired when effects are updated */
     onEffectsUpdate?: (effects: any) => void;
     className?: string;
+    /** 乱码触发间隔范围 [min, max] ms，与 scrambleDurationRangeMs 同时传入时启用间歇乱码 */
+    scrambleTriggerRangeMs?: TimeRangeMs;
+    /** 乱码单次持续时长范围 [min, max] ms */
+    scrambleDurationRangeMs?: TimeRangeMs;
 }

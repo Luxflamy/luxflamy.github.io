@@ -1,13 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import GlitchGL from '@/components/GlitchGL';
 import { GlitchRandomizer } from '@/components/GlitchRandomizer';
 import { BloomProvider } from '@/components/Bloom';
 
+const SCRAMBLE_TRIGGER_MS: [number, number] = [10000, 20000];
+const SCRAMBLE_DURATION_MS: [number, number] = [2000, 4000];
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [glowIntensity, setGlowIntensity] = useState(4);
+  const scrambleTriggerRangeMs = useMemo(() => SCRAMBLE_TRIGGER_MS, []);
+  const scrambleDurationRangeMs = useMemo(() => SCRAMBLE_DURATION_MS, []);
 
   useEffect(() => setMounted(true), []);
 
@@ -22,6 +27,8 @@ export default function Home() {
             intervalMs={2000}
             smoothing={0.98}
             masterIntensity={0.5}
+            scrambleTriggerRangeMs={scrambleTriggerRangeMs}
+            scrambleDurationRangeMs={scrambleDurationRangeMs}
             onEffectsUpdate={(eff) => {
               if (eff.crt?.glowIntensity !== undefined) {
                 setGlowIntensity(eff.crt.glowIntensity);
@@ -54,6 +61,11 @@ export default function Home() {
           >
             <GlitchGL
               text="HELLO WORLD"
+              scrambleMode="auto"
+              scrambleOptions={{
+                flickerProbability: 0.08,
+                refreshInterval: 50,
+              }}
               className="w-full h-full opacity-80"
             />
           </GlitchRandomizer>
