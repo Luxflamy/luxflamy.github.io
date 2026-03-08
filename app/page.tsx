@@ -45,7 +45,7 @@ export default function Home() {
   const contentSegments = useMemo(() => buildContentSegments(HERO_COPY, HERO_KEY_TERMS), []);
   const { containerRef, offsetRef } = useWheelScrollOffset({
     clampPx: SCROLL_CLAMP_PX,
-    sensitivity: 0.7,
+    sensitivity: 0.35,
     inertia: true,
     decayFactor: 0.92,
   });

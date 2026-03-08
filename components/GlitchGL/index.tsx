@@ -85,11 +85,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
 
         ctx.clearRect(0, 0, width, height);
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        ctx.save();
-        ctx.scale(1, -1);
-        ctx.translate(0, -height);
+        ctx.textBaseline = 'top';
 
         const fontSize = Math.min(width * 0.05, height * 0.12);
         const lineHeight = fontSize * 1.5;
@@ -98,13 +94,12 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         ctx.letterSpacing = '-1px';
 
         const lines = text.split('\n');
-        const totalHeight = (lines.length - 1) * lineHeight;
-        const startY = height / 2 + offsetY + totalHeight / 2;
+        // 正常坐标系（y 向下）：offsetY=0 时第一行贴顶，不再用 scale(1,-1) 避免字形上下/左右颠倒
+        const startY = offsetY;
         lines.forEach((line, i) => {
-            const y = startY - i * lineHeight;
+            const y = startY + i * lineHeight;
             ctx.fillText(line.trim(), width / 2, y);
         });
-        ctx.restore();
 
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -158,7 +153,8 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         gl.linkProgram(program);
         programRef.current = program;
 
-        const vertices = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
+        // UV v 与 Canvas 一致：屏幕顶部用 v=0（画布顶），屏幕底部用 v=1（画布底），避免整幅上下颠倒
+        const vertices = new Float32Array([-1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0]);
         const buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
