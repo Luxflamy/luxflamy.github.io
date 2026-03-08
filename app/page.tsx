@@ -11,56 +11,10 @@ import type { CardData } from '@/lib/cardData';
 const SCRAMBLE_TRIGGER_MS: [number, number] = [10000, 20000];
 const SCRAMBLE_DURATION_MS: [number, number] = [2000, 4000];
 
-/** plan3 完整文案（标题 + 自我介绍 + 技能 + 项目），占位由下方卡片承接 */
-const HERO_COPY = `Database Developer
-
-Hi, I'm XiangyiLi, a database and data developer passionate about building scalable data systems.
-
-I work with SQL, Python, and machine learning to turn complex data into useful insights and reliable infrastructure.
-
-My projects focus on data architecture, analytics platforms, and large-scale data processing.
-
-— 如下 —`;
-
-/** 仅这些词参与乱码，顺序需与文案中出现顺序一致 */
-const HERO_KEY_TERMS = [
-  'Database Developer',
-  'XiangyiLi',
-  'SQL',
-  'Python',
-  'machine learning',
-  'data architecture',
-  'analytics platforms',
-  'large-scale data processing',
-];
+import { HERO_COPY, HERO_KEY_TERMS, CARD_ITEMS } from '@/lib/constants/cards';
 
 /** 根据行数 + 卡片数估算可滚动范围 */
 const HERO_LINE_COUNT = HERO_COPY.split('\n').length;
-
-/** plan4 可复用卡片数据（经历、技能、项目等） */
-const CARD_ITEMS: CardData[] = [
-  {
-    title: 'Experience',
-    subtitle: 'Database Developer · 2022 – Present',
-    description: 'Building scalable data pipelines and analytics platforms.\nOptimizing queries and data architecture for large-scale systems.',
-    tags: ['SQL', 'Python', 'ETL', 'Data Modeling'],
-    variant: 'experience',
-  },
-  {
-    title: 'Skills',
-    subtitle: 'Core Technologies',
-    description: 'Proficient in relational databases, data warehousing, and machine learning pipelines.',
-    tags: ['SQL', 'Python', 'Spark', 'Airflow', 'dbt'],
-    variant: 'skill',
-  },
-  {
-    title: 'Projects',
-    subtitle: 'Data & Analytics',
-    description: 'End-to-end data solutions: from ingestion to dashboards.',
-    tags: ['Data Architecture', 'Analytics', 'ETL'],
-    variant: 'project',
-  },
-];
 
 const SCROLL_CLAMP_PX = Math.max(500, Math.round(HERO_LINE_COUNT * 90 + CARD_ITEMS.length * 100));
 
