@@ -87,18 +87,22 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        const fontSize = Math.min(width * 0.05, height * 0.12);
-        const lineHeight = fontSize * 1.5;
+        const marginV = height * 0.06;
+        const marginH = width * 0.08;
+        const contentW = width - 2 * marginH;
+        const contentH = height - 2 * marginV;
+        const fontSize = Math.min(contentW * 0.04, contentH * 0.42);
+        const lineHeight = fontSize * 1.3;
         ctx.font = `900 ${fontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = 'white';
         ctx.letterSpacing = '-1px';
 
         const lines = text.split('\n');
-        // 正常坐标系（y 向下）：offsetY=0 时第一行贴顶，不再用 scale(1,-1) 避免字形上下/左右颠倒
-        const startY = offsetY;
+        const startY = marginV + offsetY;
+        const maxWidth = contentW;
         lines.forEach((line, i) => {
             const y = startY + i * lineHeight;
-            ctx.fillText(line.trim(), width / 2, y);
+            ctx.fillText(line.trim(), width / 2, y, maxWidth);
         });
 
         const tex = gl.createTexture();
