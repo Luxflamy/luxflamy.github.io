@@ -33,6 +33,10 @@ const HERO_KEY_TERMS = [
   'large-scale data processing',
 ];
 
+/** 根据行数估算可滚动范围（与 GlitchGL 内 lineHeight ≈ fontSize*1.5、fontSize∝视口一致） */
+const HERO_LINE_COUNT = HERO_COPY.split('\n').length;
+const SCROLL_CLAMP_PX = Math.max(400, Math.round(HERO_LINE_COUNT * 90));
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [glowIntensity, setGlowIntensity] = useState(4);
@@ -40,8 +44,8 @@ export default function Home() {
   const scrambleDurationRangeMs = useMemo(() => SCRAMBLE_DURATION_MS, []);
   const contentSegments = useMemo(() => buildContentSegments(HERO_COPY, HERO_KEY_TERMS), []);
   const { containerRef, offsetRef } = useWheelScrollOffset({
-    clampPx: 80,
-    sensitivity: 0.4,
+    clampPx: SCROLL_CLAMP_PX,
+    sensitivity: 0.7,
     inertia: true,
     decayFactor: 0.92,
   });
