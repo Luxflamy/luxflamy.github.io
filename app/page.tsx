@@ -5,15 +5,40 @@ import GlitchGL from '@/components/GlitchGL';
 import { GlitchRandomizer } from '@/components/GlitchRandomizer';
 import { BloomProvider } from '@/components/Bloom';
 import { useWheelScrollOffset } from '@/hooks/useWheelScrollOffset';
+import { buildContentSegments } from '@/lib/contentSegments';
 
 const SCRAMBLE_TRIGGER_MS: [number, number] = [10000, 20000];
 const SCRAMBLE_DURATION_MS: [number, number] = [2000, 4000];
+
+/** plan3 完整文案（标题 + 自我介绍 + 技能 + 项目 + 占位） */
+const HERO_COPY = `Database Developer
+
+Hi, I'm XiangyiLi, a database and data developer passionate about building scalable data systems.
+
+I work with SQL, Python, and machine learning to turn complex data into useful insights and reliable infrastructure.
+
+My projects focus on data architecture, analytics platforms, and large-scale data processing.
+
+## 后面留给之后处理。。。`;
+
+/** 仅这些词参与乱码，顺序需与文案中出现顺序一致 */
+const HERO_KEY_TERMS = [
+  'Database Developer',
+  'XiangyiLi',
+  'SQL',
+  'Python',
+  'machine learning',
+  'data architecture',
+  'analytics platforms',
+  'large-scale data processing',
+];
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [glowIntensity, setGlowIntensity] = useState(4);
   const scrambleTriggerRangeMs = useMemo(() => SCRAMBLE_TRIGGER_MS, []);
   const scrambleDurationRangeMs = useMemo(() => SCRAMBLE_DURATION_MS, []);
+  const contentSegments = useMemo(() => buildContentSegments(HERO_COPY, HERO_KEY_TERMS), []);
   const { containerRef, offsetRef } = useWheelScrollOffset({
     clampPx: 80,
     sensitivity: 0.4,
@@ -72,12 +97,7 @@ export default function Home() {
             }}
           >
             <GlitchGL
-              text={`HELLO WORLD
-———
-Welcome
-Scroll with mouse wheel
-to preview vertical movement
-———`}
+              contentSegments={contentSegments}
               scrambleMode="auto"
               scrambleOptions={{
                 flickerCountRangeStart: [6, 8],

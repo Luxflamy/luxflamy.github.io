@@ -20,6 +20,7 @@ const DEFAULT_OPTIONS: Required<UseWheelScrollOffsetOptions> = {
 
 /**
  * 滚轮驱动垂直偏移（仅 ref，不触发重渲染）。用于「电视内文字上下移动」等场景。
+ * 位置（offsetRef）累加保留；惯性通过「速度」衰减实现，不衰减位置。
  * 返回 containerRef（挂视口收 wheel）与 offsetRef（当前偏移 px，由 GlitchGL 等读取）。
  */
 export function useWheelScrollOffset(
@@ -30,19 +31,25 @@ export function useWheelScrollOffset(
 } {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const containerRef = useRef<HTMLDivElement | null>(null);
+  /** 当前滚动位置（px），只增不减、不衰减，供 GlitchGL 读取 */
   const offsetRef = useRef<number>(0);
+  /** 惯性速度（px/帧），每帧衰减并累加到位置 */
+  const velocityRef = useRef<number>(0);
   const rafIdRef = useRef<number | null>(null);
   const rafScheduledRef = useRef(false);
 
+  const clamp = (v: number) => Math.max(-opts.clampPx, Math.min(opts.clampPx, v));
+
   useLayoutEffect(() => {
     const apply = () => {
-      if (opts.inertia) {
-        offsetRef.current *= opts.decayFactor;
-        if (Math.abs(offsetRef.current) >= opts.decayThreshold) {
+      if (opts.inertia && velocityRef.current !== 0) {
+        offsetRef.current = clamp(offsetRef.current + velocityRef.current);
+        velocityRef.current *= opts.decayFactor;
+        if (Math.abs(velocityRef.current) < opts.decayThreshold) velocityRef.current = 0;
+        if (velocityRef.current !== 0) {
           rafIdRef.current = requestAnimationFrame(apply);
           return;
         }
-        offsetRef.current = 0;
       }
       rafScheduledRef.current = false;
       rafIdRef.current = null;
@@ -51,10 +58,8 @@ export function useWheelScrollOffset(
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY * opts.sensitivity;
-      offsetRef.current = Math.max(
-        -opts.clampPx,
-        Math.min(opts.clampPx, offsetRef.current + delta)
-      );
+      offsetRef.current = clamp(offsetRef.current + delta);
+      velocityRef.current += delta;
       if (!rafScheduledRef.current) {
         rafScheduledRef.current = true;
         rafIdRef.current = requestAnimationFrame(apply);
