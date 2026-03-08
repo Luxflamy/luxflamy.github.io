@@ -109,14 +109,14 @@ export const FRAGMENT_SHADER_COMBINED = `
       return;
     }
 
-    // 6. Chromatic Aberration Pulse（最大偏移量已调小）
+    // 6. Chromatic Aberration Pulse（最大偏移量进一步降低）
     float pulse = (sin(timeScaled * 0.5) * 0.5 + 0.5) * chromaticPulseIntensity;
-    float caAmount = 0.002 + pulse * 0.005;
+    float caAmount = 0.001 + pulse * 0.002;
     
     if (interactionEnabled) {
       float dist = length(gl_FragCoord.xy - vec2(mousePx.x, resolution.y - mousePx.y));
       float mouseEffect = 1.0 - smoothstep(0.0, radiusPx * 2.5, dist);
-      caAmount += mouseEffect * effectScale * 0.02;
+      caAmount += mouseEffect * effectScale * 0.009;
     }
 
     vec3 texColor = texture2D(u_texture, curvedUV).rgb;
