@@ -3,13 +3,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GlitchEffects, GlitchInteraction, GlitchOptions } from './types';
 import { VERTEX_SHADER, FRAGMENT_SHADER_COMBINED } from '@/lib/glitch-shaders';
-import { getScrambledText, getDecodeOrder } from '@/components/ScrambleText/utils';
+import { getScrambledText, getDecodeOrder, getTransitionText } from '@/components/ScrambleText/utils';
 import type { ScrambleMode, ScrambleOptions } from '@/components/ScrambleText/types';
 import { PRESET_HERO_FLICKER } from '@/lib/scramblePresets';
 import { buildFullTextFromSegments } from '@/lib/contentSegments';
 import type { ContentSegment } from '@/lib/contentSegments';
-import { drawCardsOnCanvas } from '@/lib/cardData';
-import type { CardData } from '@/lib/cardData';
+import { drawCardsOnCanvas, getCardRects } from '@/lib/cardData';
+import type { CardData, CardPhase } from '@/lib/cardData';
 
 const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
 
@@ -83,6 +83,15 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     burstDurationMsRef.current = scrambleBurstDurationMs;
 
     const lastOffsetYRef = useRef(0);
+    const hoveredCardIndexRef = useRef<number>(-1);
+    const lastHoveredCardIndexRef = useRef<number>(-1);
+    const cardHoverStartedAtRef = useRef<number>(0);
+    // 记录每张卡的动画元数据：[startTime, phase]
+    const cardAnimStatesRef = useRef<{ startTime: number; phase: CardPhase }[]>([]);
+    const cardTransitionTextsRef = useRef<string[]>([]);
+    const lastCardTransitionUpdateRef = useRef<number>(0);
+    const cardPhasesRef = useRef<CardPhase[]>([]);
+    const lastCardPhasesRef = useRef<CardPhase[]>([]);
 
     const createTextTexture = (gl: WebGLRenderingContext, text: string, width: number, height: number, offsetY: number = 0) => {
         const textCanvas = document.createElement('canvas');
@@ -123,6 +132,9 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                 marginH,
                 baseFontSize: fontSize,
                 lineHeight,
+                hoveredCardIndex: hoveredCardIndexRef.current >= 0 ? hoveredCardIndexRef.current : undefined,
+                cardPhases: cardPhasesRef.current,
+                cardTransitionTexts: cardTransitionTextsRef.current,
             });
         }
 
@@ -340,11 +352,140 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             gl.uniform1f(gl.getUniformLocation(p, 'waveSpeed'), waves.speed ?? 2.0);
 
             gl.uniform1i(gl.getUniformLocation(p, 'interactionEnabled'), interaction.enabled ? 1 : 0);
-            gl.uniform2f(gl.getUniformLocation(p, 'mousePx'), mouseRef.current.x * (window.devicePixelRatio || 1), mouseRef.current.y * (window.devicePixelRatio || 1));
-            gl.uniform1f(gl.getUniformLocation(p, 'radiusPx'), (interaction.radius || 100) * (window.devicePixelRatio || 1));
+            const dpr = window.devicePixelRatio || 1;
+            gl.uniform2f(gl.getUniformLocation(p, 'mousePx'), mouseRef.current.x * dpr, mouseRef.current.y * dpr);
+            gl.uniform1f(gl.getUniformLocation(p, 'radiusPx'), (interaction.radius || 100) * dpr);
             gl.uniform1f(gl.getUniformLocation(p, 'effectScale'), interaction.intensity || 1.0);
 
             const offsetY = contentOffsetYRef?.current ?? 0;
+            let hoveredIndex = -1;
+            if (cards.length > 0) {
+                const lineCount = contentSegments?.length
+                    ? (displayTextRef.current || '').split('\n').length
+                    : (text ? text.split('\n').length : 0);
+                const rects = getCardRects({
+                    width: canvas.width,
+                    height: canvas.height,
+                    offsetY,
+                    lineCount,
+                    cards,
+                    cardPhases: lastCardPhasesRef.current,
+                });
+                const mouseX = mouseRef.current.x * dpr;
+                const mouseY = mouseRef.current.y * dpr;
+                for (let i = 0; i < rects.length; i++) {
+                    const r = rects[i];
+                    if (mouseX >= r.x && mouseX <= r.x + r.width && mouseY >= r.y && mouseY <= r.y + r.height) {
+                        hoveredIndex = i;
+                        break;
+                    }
+                }
+                hoveredCardIndexRef.current = hoveredIndex;
+                // 如果卡片数量变化，重置状态
+                if (cardAnimStatesRef.current.length !== cards.length) {
+                    cardAnimStatesRef.current = cards.map(() => ({ startTime: 0, phase: 'idle' }));
+                    cardTransitionTextsRef.current = cards.map(() => '');
+                }
+
+                if (hoveredIndex >= 0 && hoveredIndex !== lastHoveredCardIndexRef.current) {
+                    // 如果之前在悬停别的，或者从空白进来
+                    if (lastHoveredCardIndexRef.current >= 0) {
+                        const prev = lastHoveredCardIndexRef.current;
+                        if (cardAnimStatesRef.current[prev].phase !== 'idle') {
+                            cardAnimStatesRef.current[prev].phase = 'exiting';
+                            // 逆向动画：如果当前进度是 p，则起始点应该是让 (1-t) 匹配当前 p 的位置
+                            // 简化处理：重置时间戳，让它从当前视觉状态开始往回走
+                            const now = Date.now();
+                            const elapsed = now - cardAnimStatesRef.current[prev].startTime;
+                            const p = Math.min(1.0, elapsed / 1200);
+                            // 设逆向进度为 (1 - q)，则 1 - q = p => q = 1 - p
+                            // 新的起始时间 = now - (1200 * (1 - p))
+                            cardAnimStatesRef.current[prev].startTime = now - (1200 * (1 - p));
+                        }
+                    }
+
+                    cardAnimStatesRef.current[hoveredIndex] = {
+                        startTime: Date.now(),
+                        phase: 'scramble'
+                    };
+                } else if (hoveredIndex === -1 && lastHoveredCardIndexRef.current >= 0) {
+                    // 移出卡片到空白区域
+                    const prev = lastHoveredCardIndexRef.current;
+                    const now = Date.now();
+                    const elapsed = now - cardAnimStatesRef.current[prev].startTime;
+                    const p = Math.min(1.0, elapsed / 1200);
+                    cardAnimStatesRef.current[prev].phase = 'exiting';
+                    cardAnimStatesRef.current[prev].startTime = now - (1200 * (1 - p));
+                }
+            }
+
+            const now = Date.now();
+            // 更新所有卡片的状态机
+            const ANIM_DURATION = 400;
+            const cardPhases: CardPhase[] = cards.map((_, i) => {
+                const state = cardAnimStatesRef.current[i];
+                if (!state || state.phase === 'idle') return 'idle';
+
+                const elapsed = now - state.startTime;
+                if (state.phase === 'scramble') {
+                    if (elapsed >= ANIM_DURATION) {
+                        state.phase = 'detail';
+                        return 'detail';
+                    }
+                    return 'scramble';
+                }
+                if (state.phase === 'exiting') {
+                    if (elapsed >= ANIM_DURATION) {
+                        state.phase = 'idle';
+                        state.startTime = 0;
+                        return 'idle';
+                    }
+                    return 'exiting';
+                }
+                return state.phase;
+            });
+
+            cardPhasesRef.current = cardPhases;
+            const scrambleIntervalMs = randomBetween(40, 80);
+            const anyAnimating = cardPhases.some(p => p === 'scramble' || p === 'exiting');
+            let needScrambleRedraw = false;
+
+            if (anyAnimating) {
+                if (now - lastCardTransitionUpdateRef.current >= scrambleIntervalMs || lastCardTransitionUpdateRef.current === 0) {
+                    cardPhases.forEach((phase, i) => {
+                        if (phase !== 'scramble' && phase !== 'exiting') {
+                            cardTransitionTextsRef.current[i] = '';
+                            return;
+                        }
+
+                        const targetCard = cards[i];
+                        const sourceArr = [
+                            targetCard.title,
+                            targetCard.subtitle,
+                            targetCard.description,
+                            targetCard.tags?.join(' · ')
+                        ].filter(Boolean);
+                        const sourceStr = sourceArr.join('\n');
+                        const targetStr = targetCard.details ?? targetCard.description ?? sourceStr;
+
+                        const elapsed = now - cardAnimStatesRef.current[i].startTime;
+                        let progress = Math.min(1.0, elapsed / ANIM_DURATION);
+
+                        if (phase === 'exiting') {
+                            progress = 1.0 - progress; // 逆向
+                        }
+
+                        cardTransitionTextsRef.current[i] = getTransitionText(sourceStr, targetStr, progress, {});
+                    });
+                    lastCardTransitionUpdateRef.current = now;
+                    needScrambleRedraw = true;
+                }
+            }
+
+            const cardPhasesChanged = cards.length > 0 && (
+                lastCardPhasesRef.current.length !== cardPhases.length ||
+                cardPhases.some((p, i) => p !== lastCardPhasesRef.current[i])
+            );
             const hasTextOrSegments = text || contentSegments?.length;
             if (hasTextOrSegments && scrambleMode === 'auto') {
                 if (scrambleActiveRef.current === false && contentSegments?.length)
@@ -352,17 +493,23 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                 else if (scrambleActiveRef.current === false && text) displayTextRef.current = text ?? '';
                 const textOrOffsetChanged =
                     displayTextRef.current !== lastDisplayTextRef.current || offsetY !== lastOffsetYRef.current;
-                if (textOrOffsetChanged) {
+                const hoverChanged = cards.length > 0 && hoveredIndex !== lastHoveredCardIndexRef.current;
+                const shouldRedraw = textOrOffsetChanged || hoverChanged || cardPhasesChanged || needScrambleRedraw;
+                if (shouldRedraw) {
                     createTextTexture(gl, displayTextRef.current, canvas.width, canvas.height, offsetY);
                     lastDisplayTextRef.current = displayTextRef.current;
                     lastOffsetYRef.current = offsetY;
+                    lastHoveredCardIndexRef.current = hoveredIndex;
+                    lastCardPhasesRef.current = [...cardPhases];
                 }
-            } else if (hasTextOrSegments && offsetY !== lastOffsetYRef.current) {
+            } else if (hasTextOrSegments && (offsetY !== lastOffsetYRef.current || (cards.length > 0 && (hoveredIndex !== lastHoveredCardIndexRef.current || cardPhasesChanged || needScrambleRedraw)))) {
                 const staticStr = contentSegments?.length
                     ? (displayTextRef.current || buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined, activeScrambleIndices))
                     : (text ?? '');
                 createTextTexture(gl, staticStr, canvas.width, canvas.height, offsetY);
                 lastOffsetYRef.current = offsetY;
+                lastHoveredCardIndexRef.current = hoveredIndex;
+                lastCardPhasesRef.current = [...cardPhases];
             }
 
             gl.bindTexture(gl.TEXTURE_2D, textureRef.current);

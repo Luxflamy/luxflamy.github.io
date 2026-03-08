@@ -146,5 +146,73 @@ export function getScrambledText(
     ).join('');
   }
 
+
   return targetText;
+}
+
+/**
+ * 计算悬停过渡期间显示的字符串。
+ * 进度 progress (0.0 到 1.0)。
+ * - 0.0 ~ 0.3: 从 sourceText 开始蔓延乱码，随着进度加深，被替换的字符随之增多。
+ * - 0.3 ~ 0.6: 混沌期，完全混乱的乱码串，长度在此期间会在 sourceText 和 targetText 之间抖动或过渡。
+ * - 0.6 ~ 1.0: 显露期，基于 targetText 开始解码，直到 1.0 完全显露 targetText。
+ */
+export function getTransitionText(
+  sourceText: string,
+  targetText: string,
+  progress: number,
+  options: ScrambleOptions = {},
+  decodeOrderIndices?: number[]
+): string {
+  const chars = options.scrambleChars ?? DEFAULT_SCRAMBLE_CHARS;
+  const preserveSpaces = options.preserveSpaces ?? true;
+
+  const isSpace = (char: string) => char === ' ' || char === '\n' || char === '\u00A0';
+  const shouldPreserve = (char: string) => preserveSpaces && isSpace(char);
+
+  if (progress <= 0) return sourceText;
+  if (progress >= 1) return targetText;
+
+  // 0.0 ~ 0.3: 蔓延期 (Spread phase)
+  if (progress < 0.3) {
+    // mapped to 0.0 - 1.0
+    const localProgress = progress / 0.3;
+    const len = sourceText.length;
+    // 决定多少个字符要变成乱码，按比例随机散布
+    const numToScramble = Math.floor(localProgress * len);
+    const scrambleSet = new Set(pickDistinctIndices(len, numToScramble));
+
+    return Array.from(sourceText, (c, i) =>
+      shouldPreserve(c) ? c : (scrambleSet.has(i) ? pickRandomChar(chars) : c)
+    ).join('');
+  }
+
+  // 0.3 ~ 0.6: 混沌期 (Chaos phase)
+  if (progress < 0.6) {
+    const localProgress = (progress - 0.3) / 0.3;
+    // 长度在 sourceText 和 targetText 之间抖动和渐变
+    const targetLen = Math.round(lerp(sourceText.length, targetText.length, localProgress));
+    // 加入随机长度抖动
+    const jitter = Math.floor(Math.random() * 5) - 2;
+    const finalLen = Math.max(1, targetLen + jitter);
+
+    // 生成纯乱码，但尽量保留一些空白字符排版（使用对应下标的 targetText 的空白字符位置作为参考）
+    return Array.from({ length: finalLen }, (_, i) => {
+      const refChar = i < targetText.length ? targetText[i] : (i < sourceText.length ? sourceText[i] : '');
+      if (refChar && shouldPreserve(refChar)) return refChar;
+      return pickRandomChar(chars);
+    }).join('');
+  }
+
+  // 0.6 ~ 1.0: 显露期 (Reveal phase)
+  // mapped to 0.0 - 1.0
+  const localProgress = (progress - 0.6) / 0.4;
+  const len = targetText.length;
+  const numDecoded = Math.min(len, Math.floor(localProgress * len));
+  const order = decodeOrderIndices ?? getDecodeOrder(len, options.decodeOrder);
+  const decodedSet = new Set(order.slice(0, numDecoded));
+
+  return Array.from(targetText, (c, i) =>
+    shouldPreserve(c) || decodedSet.has(i) ? c : pickRandomChar(chars)
+  ).join('');
 }
