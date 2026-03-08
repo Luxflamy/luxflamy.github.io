@@ -28,18 +28,27 @@ export function buildContentSegments(fullCopy: string, keyTerms: string[]): Cont
 
 /**
  * 根据当前乱码状态生成整段显示文案（静态片段原样，可乱码片段用 getScrambledText）。
- * 供 GlitchGL 在 tick / handleResize 中复用。
+ * activeScrambleIndices：本次参与乱码的片段下标；不传则所有 type=scramble 都乱码；传则仅这些下标做乱码，其余 scramble 显示原文。
  */
 export function buildFullTextFromSegments(
   segments: ContentSegment[],
   mode: ScrambleMode,
   progress: number,
   options: ScrambleOptions,
-  burstProgress?: number
+  burstProgress?: number,
+  activeScrambleIndices?: Set<number> | number[] | null
 ): string {
+  const activeSet =
+    activeScrambleIndices == null
+      ? null
+      : Array.isArray(activeScrambleIndices)
+        ? new Set(activeScrambleIndices)
+        : activeScrambleIndices;
   return segments
-    .map((seg) =>
-      seg.type === 'static' ? seg.text : getScrambledText(seg.text, mode, progress, options, undefined, burstProgress)
-    )
+    .map((seg, i) => {
+      if (seg.type === 'static') return seg.text;
+      if (activeSet !== null && !activeSet.has(i)) return seg.text;
+      return getScrambledText(seg.text, mode, progress, options, undefined, burstProgress);
+    })
     .join('');
 }

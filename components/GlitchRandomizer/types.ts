@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import type { ContentSegment } from '@/lib/contentSegments';
 
 export type RandomRange = [number, number];
 
@@ -51,4 +52,6 @@ export interface GlitchRandomizerProps {
     scrambleDurationRangeMs?: TimeRangeMs;
     /** 透传给子组件（如 GlitchGL）的 contentOffsetYRef，用于电视内文字上下滚动 */
     contentOffsetYRef?: RefObject<number>;
+    /** 分段内容，用于每次 burst 只对一部分重点词做乱码（随机选 1～2 个 scramble 片段） */
+    contentSegments?: ContentSegment[];
 }

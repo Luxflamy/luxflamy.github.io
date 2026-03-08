@@ -8,6 +8,8 @@ import type { ScrambleMode, ScrambleOptions } from '@/components/ScrambleText/ty
 import { PRESET_HERO_FLICKER } from '@/lib/scramblePresets';
 import { buildFullTextFromSegments } from '@/lib/contentSegments';
 import type { ContentSegment } from '@/lib/contentSegments';
+import { drawCardsOnCanvas } from '@/lib/cardData';
+import type { CardData } from '@/lib/cardData';
 
 const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min;
 
@@ -32,6 +34,10 @@ interface GlitchGLProps {
     contentOffsetYRef?: React.RefObject<number>;
     /** 分段内容：仅 type=scramble 的片段参与乱码，与 text 二选一 */
     contentSegments?: ContentSegment[];
+    /** 本次 burst 参与乱码的片段下标（由 GlitchRandomizer 注入），不传则全部 scramble 都乱码 */
+    activeScrambleIndices?: number[];
+    /** 文案下方绘制的卡片（与文案共处同一画布，保留完整 CRT 效果） */
+    cards?: CardData[];
 }
 
 const DECODE_DURATION_MS = 2000;
@@ -49,6 +55,8 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     scrambleBurstDurationMs = 1,
     contentOffsetYRef,
     contentSegments,
+    activeScrambleIndices,
+    cards = [],
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -91,8 +99,8 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         const marginH = width * 0.08;
         const contentW = width - 2 * marginH;
         const contentH = height - 2 * marginV;
-        const fontSize = Math.min(contentW * 0.04, contentH * 0.42);
-        const lineHeight = fontSize * 1.3;
+        const fontSize = Math.min(contentW * 0.032, contentH * 0.065);
+        const lineHeight = fontSize * 1.5;
         ctx.font = `900 ${fontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = 'white';
         ctx.letterSpacing = '-1px';
@@ -104,6 +112,19 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             const y = startY + i * lineHeight;
             ctx.fillText(line.trim(), width / 2, y, maxWidth);
         });
+
+        if (cards.length > 0) {
+            const textBottomY = marginV + offsetY + lines.length * lineHeight + lineHeight * 0.8;
+            drawCardsOnCanvas({
+                ctx,
+                cards,
+                startY: textBottomY,
+                width,
+                marginH,
+                baseFontSize: fontSize,
+                lineHeight,
+            });
+        }
 
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -180,7 +201,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
 
             const offsetY = contentOffsetYRef?.current ?? 0;
             if (contentSegments?.length) {
-                const fallback = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined);
+                const fallback = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined, activeScrambleIndices);
                 createTextTexture(gl, displayTextRef.current || fallback, canvas.width, canvas.height, offsetY);
             } else if (text) {
                 if (scrambleMode !== 'auto') {
@@ -197,7 +218,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
         const hasScrambleSegment = contentSegments?.some((s) => s.type === 'scramble');
         const opts = () => ({ ...PRESET_HERO_FLICKER, ...scrambleOptionsRef.current });
         if (contentSegments?.length && !runScramble) {
-            displayTextRef.current = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined);
+            displayTextRef.current = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined, activeScrambleIndices);
         }
         if (text && !contentSegments?.length) {
             decodeOrderRef.current = getDecodeOrder(text.length, opts().decodeOrder ?? 'sequential');
@@ -212,7 +233,8 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                     opts(),
                     burstDurationMsRef.current > 0
                         ? Math.min(1, Math.max(0, (Date.now() - burstStartedAtRef.current) / burstDurationMsRef.current))
-                        : undefined
+                        : undefined,
+                    activeScrambleIndices
                 );
             } else if (text) {
                 displayTextRef.current = text;
@@ -244,7 +266,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                         )
                         : undefined;
                 if (contentSegments?.length) {
-                    displayTextRef.current = buildFullTextFromSegments(contentSegments, mode, progress, o, burstProgress);
+                    displayTextRef.current = buildFullTextFromSegments(contentSegments, mode, progress, o, burstProgress, activeScrambleIndices);
                 } else if (text) {
                     displayTextRef.current = getScrambledText(
                         text,
@@ -326,7 +348,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             const hasTextOrSegments = text || contentSegments?.length;
             if (hasTextOrSegments && scrambleMode === 'auto') {
                 if (scrambleActiveRef.current === false && contentSegments?.length)
-                    displayTextRef.current = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined);
+                    displayTextRef.current = buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined, activeScrambleIndices);
                 else if (scrambleActiveRef.current === false && text) displayTextRef.current = text ?? '';
                 const textOrOffsetChanged =
                     displayTextRef.current !== lastDisplayTextRef.current || offsetY !== lastOffsetYRef.current;
@@ -337,7 +359,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                 }
             } else if (hasTextOrSegments && offsetY !== lastOffsetYRef.current) {
                 const staticStr = contentSegments?.length
-                    ? (displayTextRef.current || buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined))
+                    ? (displayTextRef.current || buildFullTextFromSegments(contentSegments, 'idle', 0, opts(), undefined, activeScrambleIndices))
                     : (text ?? '');
                 createTextTexture(gl, staticStr, canvas.width, canvas.height, offsetY);
                 lastOffsetYRef.current = offsetY;
@@ -357,7 +379,7 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                 glRef.current.deleteTexture(textureRef.current);
             }
         };
-    }, [src, text, effects, interaction, scrambleMode, scrambleActive, contentSegments]);
+    }, [src, text, effects, interaction, scrambleMode, scrambleActive, contentSegments, cards]);
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!containerRef.current) return;

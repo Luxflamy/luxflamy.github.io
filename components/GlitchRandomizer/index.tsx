@@ -22,11 +22,13 @@ export function GlitchRandomizer({
     scrambleTriggerRangeMs,
     scrambleDurationRangeMs,
     contentOffsetYRef,
+    contentSegments,
 }: GlitchRandomizerProps) {
     const [currentEffects, setCurrentEffects] = useState<GlitchEffects>(baseEffects);
     const [scrambleActive, setScrambleActive] = useState(false);
     const [burstStartedAt, setBurstStartedAt] = useState(0);
     const [burstDurationMs, setBurstDurationMs] = useState(1);
+    const [activeScrambleIndices, setActiveScrambleIndices] = useState<number[]>([]);
 
     const targetValuesRef = useRef<Record<string, number>>({});
     const currentValuesRef = useRef<Record<string, number>>({});
@@ -35,8 +37,10 @@ export function GlitchRandomizer({
     const scrambleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const triggerRangeRef = useRef<TimeRangeMs | undefined>(scrambleTriggerRangeMs);
     const durationRangeRef = useRef<TimeRangeMs | undefined>(scrambleDurationRangeMs);
+    const contentSegmentsRef = useRef<typeof contentSegments>(contentSegments);
     triggerRangeRef.current = scrambleTriggerRangeMs;
     durationRangeRef.current = scrambleDurationRangeMs;
+    contentSegmentsRef.current = contentSegments;
 
     useEffect(() => {
         // Initialize current values from base effects or range minimums
@@ -156,6 +160,20 @@ export function GlitchRandomizer({
             const delayMs = randomBetween(trigger[0], trigger[1]);
             scrambleTimeoutRef.current = setTimeout(() => {
                 const durationMs = randomBetween(duration[0], duration[1]);
+                const segs = contentSegmentsRef.current;
+                const scrambleIndices =
+                    segs?.map((s, i) => (s.type === 'scramble' ? i : -1)).filter((i) => i >= 0) ?? [];
+                const n = scrambleIndices.length === 0 ? 0 : Math.min(1 + (Math.random() > 0.5 ? 1 : 0), scrambleIndices.length);
+                const picked =
+                    n <= 0
+                        ? []
+                        : scrambleIndices.length <= n
+                            ? [...scrambleIndices]
+                            : (() => {
+                                const shuffled = [...scrambleIndices].sort(() => Math.random() - 0.5);
+                                return shuffled.slice(0, n);
+                            })();
+                setActiveScrambleIndices(picked);
                 setBurstStartedAt(Date.now());
                 setBurstDurationMs(durationMs);
                 setScrambleActive(true);
@@ -177,6 +195,7 @@ export function GlitchRandomizer({
                 scrambleActive,
                 scrambleBurstStartedAt: burstStartedAt,
                 scrambleBurstDurationMs: burstDurationMs,
+                activeScrambleIndices,
             }
             : {};
     const clonedChild = React.isValidElement(children)
