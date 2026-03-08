@@ -85,9 +85,11 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
     const lastOffsetYRef = useRef(0);
     const hoveredCardIndexRef = useRef<number>(-1);
     const lastHoveredCardIndexRef = useRef<number>(-1);
-    const cardHoverStartedAtRef = useRef<number>(0);
-    // 记录每张卡的动画元数据：[startTime, phase]
-    const cardAnimStatesRef = useRef<{ startTime: number; phase: CardPhase }[]>([]);
+    const lastFrameTimeRef = useRef<number>(0);
+    // 记录每张卡的实时进度 (0.0 到 1.0)
+    const cardProgressRef = useRef<number[]>([]);
+    // 记录每张卡的目标进度 (0.0 或 1.0)
+    const cardTargetProgressRef = useRef<number[]>([]);
     const cardTransitionTextsRef = useRef<string[]>([]);
     const lastCardTransitionUpdateRef = useRef<number>(0);
     const cardPhasesRef = useRef<CardPhase[]>([]);
@@ -381,68 +383,44 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                     }
                 }
                 hoveredCardIndexRef.current = hoveredIndex;
-                // 如果卡片数量变化，重置状态
-                if (cardAnimStatesRef.current.length !== cards.length) {
-                    cardAnimStatesRef.current = cards.map(() => ({ startTime: 0, phase: 'idle' }));
+
+                // 初始化进度数组
+                if (cardProgressRef.current.length !== cards.length) {
+                    cardProgressRef.current = cards.map(() => 0);
+                    cardTargetProgressRef.current = cards.map(() => 0);
                     cardTransitionTextsRef.current = cards.map(() => '');
                 }
 
-                if (hoveredIndex >= 0 && hoveredIndex !== lastHoveredCardIndexRef.current) {
-                    // 如果之前在悬停别的，或者从空白进来
-                    if (lastHoveredCardIndexRef.current >= 0) {
-                        const prev = lastHoveredCardIndexRef.current;
-                        if (cardAnimStatesRef.current[prev].phase !== 'idle') {
-                            cardAnimStatesRef.current[prev].phase = 'exiting';
-                            // 逆向动画：如果当前进度是 p，则起始点应该是让 (1-t) 匹配当前 p 的位置
-                            // 简化处理：重置时间戳，让它从当前视觉状态开始往回走
-                            const now = Date.now();
-                            const elapsed = now - cardAnimStatesRef.current[prev].startTime;
-                            const p = Math.min(1.0, elapsed / 1200);
-                            // 设逆向进度为 (1 - q)，则 1 - q = p => q = 1 - p
-                            // 新的起始时间 = now - (1200 * (1 - p))
-                            cardAnimStatesRef.current[prev].startTime = now - (1200 * (1 - p));
-                        }
-                    }
-
-                    cardAnimStatesRef.current[hoveredIndex] = {
-                        startTime: Date.now(),
-                        phase: 'scramble'
-                    };
-                } else if (hoveredIndex === -1 && lastHoveredCardIndexRef.current >= 0) {
-                    // 移出卡片到空白区域
-                    const prev = lastHoveredCardIndexRef.current;
-                    const now = Date.now();
-                    const elapsed = now - cardAnimStatesRef.current[prev].startTime;
-                    const p = Math.min(1.0, elapsed / 1200);
-                    cardAnimStatesRef.current[prev].phase = 'exiting';
-                    cardAnimStatesRef.current[prev].startTime = now - (1200 * (1 - p));
-                }
+                // 更新目标
+                cards.forEach((_, i) => {
+                    cardTargetProgressRef.current[i] = (hoveredIndex === i) ? 1.0 : 0.0;
+                });
             }
 
             const now = Date.now();
-            // 更新所有卡片的状态机
-            const ANIM_DURATION = 400;
-            const cardPhases: CardPhase[] = cards.map((_, i) => {
-                const state = cardAnimStatesRef.current[i];
-                if (!state || state.phase === 'idle') return 'idle';
+            const deltaTime = lastFrameTimeRef.current === 0 ? 0 : now - lastFrameTimeRef.current;
+            lastFrameTimeRef.current = now;
 
-                const elapsed = now - state.startTime;
-                if (state.phase === 'scramble') {
-                    if (elapsed >= ANIM_DURATION) {
-                        state.phase = 'detail';
-                        return 'detail';
+            const ANIM_DURATION = 300; // 统一动画时长
+
+            // 更新所有卡片的实时进度与状态
+            const cardPhases: CardPhase[] = cards.map((_, i) => {
+                const currentP = cardProgressRef.current[i];
+                const targetP = cardTargetProgressRef.current[i];
+
+                if (currentP !== targetP) {
+                    const step = deltaTime / ANIM_DURATION;
+                    if (currentP < targetP) {
+                        cardProgressRef.current[i] = Math.min(targetP, currentP + step);
+                    } else {
+                        cardProgressRef.current[i] = Math.max(targetP, currentP - step);
                     }
-                    return 'scramble';
                 }
-                if (state.phase === 'exiting') {
-                    if (elapsed >= ANIM_DURATION) {
-                        state.phase = 'idle';
-                        state.startTime = 0;
-                        return 'idle';
-                    }
-                    return 'exiting';
-                }
-                return state.phase;
+
+                const p = cardProgressRef.current[i];
+                if (p <= 0) return 'idle';
+                if (p >= 1) return 'detail';
+                return (targetP === 1.0) ? 'scramble' : 'exiting';
             });
 
             cardPhasesRef.current = cardPhases;
@@ -453,8 +431,9 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
             if (anyAnimating) {
                 if (now - lastCardTransitionUpdateRef.current >= scrambleIntervalMs || lastCardTransitionUpdateRef.current === 0) {
                     cardPhases.forEach((phase, i) => {
-                        if (phase !== 'scramble' && phase !== 'exiting') {
-                            cardTransitionTextsRef.current[i] = '';
+                        const progress = cardProgressRef.current[i];
+                        if (progress <= 0 || progress >= 1 && phase === 'detail') {
+                            if (phase === 'idle') cardTransitionTextsRef.current[i] = '';
                             return;
                         }
 
@@ -467,13 +446,6 @@ const GlitchGL: React.FC<GlitchGLProps> = ({
                         ].filter(Boolean);
                         const sourceStr = sourceArr.join('\n');
                         const targetStr = targetCard.details ?? targetCard.description ?? sourceStr;
-
-                        const elapsed = now - cardAnimStatesRef.current[i].startTime;
-                        let progress = Math.min(1.0, elapsed / ANIM_DURATION);
-
-                        if (phase === 'exiting') {
-                            progress = 1.0 - progress; // 逆向
-                        }
 
                         cardTransitionTextsRef.current[i] = getTransitionText(sourceStr, targetStr, progress, {});
                     });
